@@ -13,16 +13,7 @@ olink_hits <- read_excel(here::here("data/Olink_GWAS_hits.xlsx"))
 olink_pve <- fread(here::here("data/202304_region_protein_pairs_withpve.txt"))
 ```
 
-
-## To do:
-
-* Size smaller dots and 5MB (could do 1MB)
-* Plot PVE per protein for rec and add models (done)
-* Add lambda values per protein for each model 
-* Check out ADAMTS13
-
 ## Genetic architecture of pQTLs
-
 
 ```{r plot-pQTL-protein-pos, warning=FALSE, echo=FALSE, message=FALSE}
 #| label: fig-pQL-protein-pos
