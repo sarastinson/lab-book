@@ -425,18 +425,5 @@ ggplot(aes(x = bp_cum, y = -log10(p_score),
   ) +
   guides(size="none")
 
-
-manhattan(CD_UKBB)
-colnames(CD_UKBB)
-
-mp <- olink_hits %>%
-    separate(snpid,
-             into = c("CHROM", "POS", "REF", "ALT"),
-             sep = ":") %>%
-    dplyr::select(CHROM, POS, REF, ALT, p_score, AltAF_GRL) %>% 
-    rename(P = p_score,
-           AF = AltAF_GRL)
-manhattan(mp)
-
 ```
 
