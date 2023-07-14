@@ -1,0 +1,451 @@
+---
+title: "Greenland Olink Analyses"
+author: "Sara Stinson"
+format: html
+---
+
+```{r setup, warning=FALSE, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(readxl)
+library(data.table)
+library(topr)
+olink_hits <- read_excel(here::here("data/Olink_GWAS_hits.xlsx"))
+olink_pve <- fread(here::here("data/202304_region_protein_pairs_withpve.txt"))
+```
+
+
+## To do:
+
+* Size smaller dots and 5MB (could do 1MB)
+* Plot PVE per protein for rec and add models (done)
+* Add lambda values per protein for each model 
+* Check out ADAMTS13
+
+## Genetic architecture of pQTLs
+
+
+```{r plot-pQTL-protein-pos, warning=FALSE, echo=FALSE, message=FALSE}
+#| label: fig-pQL-protein-pos
+#| fig-cap: "Genetic architecture of pQTLs."
+#| layout-ncol: 3
+#| layout-nrow: 3
+#| fig-subcap:
+#|   - "Primary pQTLs against the locations of the transcription start site of the gene coding the protein target."
+#|   - "The number of primary pQTLs by chromosome according to model."
+#|   - "Distribution of number of associated proteins per SNP."
+#|   - "Distribution of number of associated SNPs per protein."
+#|   - "The number of cis and trans pQTLs according to model."
+#|   - "Previously reported vs. novel cis and trans pQTLs according to model."
+#|   - "The number of proteins that are associated with cis only-, trans only- and both cis and trans pQTLs."
+#|   - "Variant annotation."
+
+olink_hits %>%
+  dplyr::mutate(cis_trans = as.factor(case_when(
+    cisGeneDist == "NA" | cisGeneDist >= 5000000 & model == "REC" ~ "Trans:REC",
+    cisGeneDist == "NA" | cisGeneDist >= 5000000 & model == "ADD" ~ "Trans:ADD",
+    cisGeneDist < 5000000 & model == "REC" ~ "Cis:REC",
+    cisGeneDist < 5000000 & model == "ADD" ~ "Cis:ADD"
+  ))) %>%
+  dplyr::mutate(
+    cis_chr = gsub("chr", "", cisGeneChr),
+    cis_chr_ps = as.numeric(paste0(cis_chr, ".", cisGeneStart)),
+    pqtl_chr_ps = as.numeric(paste0(chr, ".", ps))
+  ) %>%
+  ggplot(aes(x = pqtl_chr_ps, y = cis_chr_ps, color = cis_trans)) +
+  geom_point(size = 1) +
+  theme_bw() +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.title = element_blank(),
+    legend.text = element_text(size = 12, colour = "black"),
+    axis.text = element_text(size = 12, colour = "black"),
+    axis.title.x = element_text(
+      size = 12,
+      colour = "black",
+      margin = margin(
+        t = 10,
+        r = 0,
+        b = 0,
+        l = 0
+      )
+    ),
+    axis.title.y = element_text(
+      size = 12,
+      colour = "black",
+      margin = margin(
+        t = 0,
+        r = 10,
+        b = 0,
+        l = 0
+      )
+    )
+  ) +
+    scale_color_manual(values = c("#B2172C", "#EF8A62", "#1F66AB", "#66A8CF")) + 
+  scale_x_continuous(limits = c(1, 22), breaks = seq(from = 1, to = 22, by = 1)) +
+  scale_y_continuous(limits = c(1, 22), breaks = seq(from = 1, to = 22, by = 1)) +
+  xlab("pQTL position") +
+  ylab("protien position")
+
+## Number of associated SNPs per Chr
+olink_hits %>%
+dplyr::mutate(cis_trans_model = as.factor(case_when(
+    cisGeneDist == "NA" | cisGeneDist >= 5000000 & model == "REC" ~ "Trans:REC",
+    cisGeneDist == "NA" | cisGeneDist >= 5000000 & model == "ADD" ~ "Trans:ADD",
+    cisGeneDist < 5000000 & model == "REC" ~ "Cis:REC",
+    cisGeneDist < 5000000 & model == "ADD" ~ "Cis:ADD"
+  ))) %>%
+  dplyr::group_by(chr, cis_trans_model) %>%
+  tally() %>%
+  ggplot(aes(
+    x = chr,
+    y = n,
+    fill = cis_trans_model,
+  )) +
+  geom_bar(
+    stat = "identity",
+    width = 0.75,
+    show.legend = T,
+    #position = position_dodge(preserve = "single")
+  ) +
+  scale_x_continuous(breaks = seq(from = 1, to = 22, by = 1)) +
+  scale_y_continuous(limits = c(0, 50), breaks = seq(from = 0, to = 50, by = 5), expand = c(0, 0)) +
+    scale_fill_manual(values = c("#B2172C", "#EF8A62", "#1F66AB", "#66A8CF")) + 
+  #scale_fill_manual(values = c("#0b5394", "#cfe2f3")) +
+  theme_bw() +
+  theme(panel.grid = element_blank(),
+    legend.title = element_blank(),
+    #legend.position = c(0.9, 0.9),
+    legend.text = element_text(size = 12, colour = "black"),
+    axis.text = element_text(size = 12, colour = "black"),
+    axis.title.x = element_text(
+      size = 12,
+      colour = "black",
+      margin = margin(
+        t = 10,
+        r = 0,
+        b = 0,
+        l = 0
+      )
+    ),
+    axis.title.y = element_text(
+      size = 12,
+      colour = "black",
+      margin = margin(
+        t = 0,
+        r = 10,
+        b = 0,
+        l = 0
+      )
+    )
+  ) +
+  xlab("Chromosome") +
+  ylab("Number of pQTLs")
+
+
+## Number of proteins per SNP
+g <- theme_bw() +
+    theme(panel.grid = element_blank(), 
+          legend.title = element_blank(), 
+          axis.text = element_text(size = 12, colour = "black"),
+          legend.text = element_text(size = 12, colour = "black"),
+          axis.title.x = element_text(size = 12,  colour = "black", margin = margin(t = 10, r = 0,  b = 0, l = 0)),
+          axis.title.y = element_text(size = 12, colour = "black", margin = margin(t = 0, r = 10,  b = 0, l = 0)))  
+
+olink_hits %>%
+    group_by(snpid,model) %>%
+    summarise(count=n()) %>% 
+    group_by(model,count) %>%
+    summarise(sums=n()) %>%
+    group_by(model) %>%
+    complete(count=1:max(count), fill = list(sums = 0)) %>%
+    ggplot(aes(fill=model,x=factor(count),y=sums))+
+    geom_bar(stat="identity",position="dodge", width = 0.75) + g +
+    xlab("Number of associated proteins per SNP") +
+    ylab("Number of pQTLs") +
+    scale_y_continuous(limits = c(0, 220), expand = c(0, 0)) +
+    scale_fill_manual(values = c("#B2172C", "#EF8A62"))
+
+## Number of associated SNPs per protein
+olink_hits %>%
+    group_by(Phenotype, model) %>%
+    summarise(count = n()) %>%
+    ggplot(aes(fill = model, x = count)) +
+    geom_bar(width = 0.75, position="dodge") + 
+    g +
+    xlab("Number of associated SNPs per protein") +
+    ylab("Number of pQTLs") +
+    scale_y_continuous(limits = c(0, 80), expand = c(0, 0)) +
+    scale_fill_manual(values = c("#B2172C", "#EF8A62"))
+
+## Pie charts
+olink_df <- olink_hits %>%
+  dplyr::mutate(cis_trans = as.factor(case_when(
+    cisGeneDist == "NA" ~ "Trans",
+    cisGeneDist != "NA" ~ "Cis"
+  ))) %>%
+  dplyr::mutate(novel_pqtl = case_when(
+    knownHitHg19Pos == "NA" ~ "yes",
+    knownHitHg19Pos != "NA" ~ "no"
+  ))
+
+ADDcols <- c("#B2172C", "#1F66AB")
+
+add_pie <- olink_df %>%
+    group_by(model, cis_trans) %>%
+    tally() %>%
+    dplyr::filter(model == "ADD") %>%
+    mutate(percent = round(n / sum(n) * 100)) %>%
+    mutate(lab.ypos = cumsum(percent) - 0.5 * percent) %>%
+    ggplot(aes(x = 2, y = percent, fill = cis_trans)) +
+    geom_bar(stat = "identity") +
+    coord_polar(theta = "y", start = 0) +
+    scale_fill_manual(values = ADDcols,
+                      labels = c("Cis: 125 (48%)", "Trans: 133 (52%)")) +
+    theme_void() +
+    xlim(0.5, 2.5) +
+    ggtitle("ADD") +
+    theme(legend.title = element_blank(),
+          legend.position = "bottom",
+          legend.text = element_text(size = 12, colour = "black"),
+          plot.title = element_text(size = 12, colour = "black", hjust = 0.5)) +
+    guides(fill = guide_legend(nrow = 2, byrow = TRUE))
+
+RECcols <- c("#EF8A62", "#66A8CF")
+
+rec_pie <- olink_df %>%
+    group_by(model, cis_trans) %>%
+    tally() %>%
+    dplyr::filter(model == "REC") %>%
+    mutate(percent = round(n / sum(n) * 100)) %>%
+    mutate(lab.ypos = cumsum(percent) - 0.5 * percent) %>%
+    ggplot(aes(x = 2, y = percent, fill = cis_trans)) +
+    geom_bar(stat = "identity") +
+    coord_polar(theta = "y", start = 0) +
+    scale_fill_manual(values = RECcols,
+                      labels = c("Cis: 78 (51%)", "Trans: 76 (49%)")) +
+    theme_void() +
+    xlim(0.5, 2.5) +
+    ggtitle("REC") +
+    theme(legend.title = element_blank(),
+          legend.position = "bottom",
+          legend.text = element_text(size = 12, colour = "black"),
+          plot.title = element_text(size = 12, colour = "black", hjust = 0.5)) +
+    guides(fill = guide_legend(nrow = 2, byrow = TRUE))
+
+gridExtra::grid.arrange(add_pie, rec_pie, ncol=2)
+
+## Plot novel pQTLs
+olink_df %>%
+    dplyr::mutate(
+        cs = ifelse(cisGeneDist < 5000000, "cis", "trans"),
+        cs = ifelse(is.na(cisGeneDist), "trans", cs),
+        cis_trans_model = as.factor(
+            case_when(
+                cs == "trans" & model == "REC" ~ "Trans:REC",
+                cs == "trans" & model == "ADD" ~ "Trans:ADD",
+                cs == "cis" & model == "REC" ~ "Cis:REC",
+                cs == "cis" & model == "ADD" ~ "Cis:ADD"
+            )
+        )
+    ) %>% 
+    mutate(cis_trans_model = factor(cis_trans_model, levels = c("Cis:ADD", "Cis:REC", "Trans:ADD", "Trans:REC"))) %>% 
+    dplyr::mutate(novel_pqtl = case_when(
+        knownHitHg19Pos == "NA" ~ "Novel",
+        knownHitHg19Pos != "NA" ~ "Reported"
+    )) %>%
+    group_by(cis_trans_model, novel_pqtl) %>%
+    tally() %>%
+    ggplot(aes(x = novel_pqtl, y = n, fill = cis_trans_model)) +
+    geom_bar( stat = "identity",
+    width = 0.75,
+    position = "dodge2") +
+    scale_fill_manual(values = c("#B2172C", "#EF8A62", "#1F66AB", "#66A8CF")) + 
+    theme_bw() +
+    scale_y_continuous(limits = c(0, 125), expand = c(0, 0)) +
+    ylab("Number of pQTLs") +
+    xlab("") +
+    coord_flip() +
+    theme(panel.grid = element_blank(),
+        legend.position = "right",
+        legend.title = element_blank(),
+          axis.text = element_text(size = 12, colour = "black"),
+          strip.text = element_text(size = 12, colour = "black"),
+          strip.background = element_rect(colour = "black", fill = "white", size = 0.4)) 
+
+## Cis, trans, cis + trans
+tmpcs <- olink_hits %>% mutate(cs = ifelse(cisGeneDist < 5000000, "Cis", "Trans")) %>%
+    mutate(cs = ifelse(is.na(cisGeneDist), "Trans", cs)) %>%
+    group_by(Phenotype, model, cs) %>%
+    summarise(count = n()) %>%
+    group_by(Phenotype, model) %>%
+    mutate(tag = paste(Phenotype, model, sep = ":"))
+
+bothcs <- tmpcs %>%
+    group_by(tag) %>%
+    summarise(count = n()) %>%
+    filter(count > 1) %>%
+    mutate(cs = "Cis&Trans")
+
+ct <- tmpcs %>%
+    filter(!tag %in% bothcs$tag) %>%
+    select(Phenotype, model, count, cs)
+
+bothcs <- bothcs %>%
+    separate(tag, into = c("Phenotype", "model"), sep = ":")
+
+cistrans <- rbind(ct, bothcs)
+
+cistrans$cs <-factor(cistrans$cs, levels = c("Cis", "Trans", "Cis&Trans"))
+
+cistrans %>%
+    ggplot(aes(fill = model, x = cs)) +
+    geom_bar(position = "dodge", width = 0.5) + g +
+    xlab("") +
+    ylab("Number of proteins") +
+    scale_y_continuous(limits = c(0, 60), expand = c(0, 0)) +
+    scale_fill_manual(values = c("#B2172C", "#EF8A62"))
+
+## pQTLs by function
+olink_hits %>%
+  dplyr::group_by(Function) %>%
+  tally() %>%
+  arrange(n) %>%
+  ggplot(aes(
+    x = reorder(Function, n),
+    y = n,
+    fill = Function
+  )) +
+  geom_bar(
+    stat = "identity",
+    width = 0.75,
+    show.legend = F
+  ) +
+  coord_flip() +
+  scale_y_continuous(limits = c(0, 200), breaks = seq(from = 0, to = 200, by = 50), expand = c(0, 0)) +
+  theme_bw() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text = element_text(size = 12, colour = "black"),
+    axis.title.x = element_text(
+      size = 12,
+      colour = "black",
+      margin = margin(
+        t = 10,
+        r = 0,
+        b = 0,
+        l = 0
+      )
+    ),
+    axis.title.y = element_text(
+      size = 12,
+      colour = "black",
+      margin = margin(
+        t = 0,
+        r = 10,
+        b = 0,
+        l = 0
+      )
+    )
+  ) +
+  xlab("Function") +
+  ylab("Number of pQTLs")
+
+```
+
+## PVE
+
+```{r pve-pQTLs, warning=FALSE, echo=FALSE, message=FALSE, fig.width=25, fig.height=5}
+
+olink_pve %>%
+    mutate(assay = gsub("OLINK_", "", Phenotype)) %>% 
+    group_by(assay, model) %>%
+    summarise(mean_pve = mean(pve)*100) %>%
+    arrange(mean_pve) %>% 
+    dplyr::mutate(model_fig = as.factor(case_when(
+    model == "add" ~ "ADD",
+    model == "rec" ~ "REC"))) %>%
+    ggplot(aes(x = reorder(assay,-mean_pve), y = mean_pve, fill = model_fig, color = model_fig)) +
+    geom_point(pch = 21) +
+    xlab("") +
+    ylab("PVE (%)") +
+        scale_fill_manual(values = c("#B2172C", "#EF8A62", "#1F66AB", "#66A8CF")) +
+    scale_color_manual(values = c("#B2172C", "#EF8A62", "#1F66AB", "#66A8CF")) +
+    scale_y_continuous(limits = c(0, 50), expand = c(0,0)) +
+    theme_bw() +
+    theme(panel.grid = element_blank(),
+          axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1, size = 12, colour = "black"),
+          axis.text.y = element_text(size = 12, colour = "black"),
+          axis.title.x = element_text(size = 12, colour = "black"),
+          axis.title.y = element_text(size = 12, colour = "black", margin = margin(t = 0, r = 10, b = 0, l = 0)),
+          legend.text = element_text(size = 12, colour = "black"),
+          legend.title = element_blank())
+
+```
+
+```{r manhattan, warning=FALSE, echo=FALSE, message=FALSE}
+
+mp <- olink_hits %>% 
+  separate(snpid, into = c("CHROM", "POS", "REF", "ALT"), sep = ":") %>% 
+    mutate(CHROM = gsub("chr", "", CHROM))
+
+data_cum <- mp %>% 
+  group_by(CHROM) %>% 
+  summarise(max_bp = max(POS)) %>% 
+  mutate(bp_add = lag(cumsum(max_bp), default = 0)) %>% 
+  select(CHROM, bp_add)
+
+gwas_data <- mp %>% 
+  inner_join(data_cum, by = "CHROM") %>% 
+  mutate(bp_cum = ps + bp_add)
+
+axis_set <- gwas_data %>% 
+  group_by(CHROM) %>% 
+  summarize(center = mean(bp_cum)) 
+
+ylim <- gwas_data %>% 
+  filter(p_score == min(p_score)) %>% 
+  mutate(ylim = abs(floor(log10(p_score))) + 2) %>% 
+  pull(ylim)
+
+## Manhattan
+sig <- 5e-8   
+
+gwas_data %>% 
+ggplot(aes(x = bp_cum, y = -log10(p_score), 
+                                  color = model, size = -log10(p_score))) +
+  geom_hline(yintercept = -log10(sig), color = "grey40", linetype = "dashed") + 
+  geom_point(alpha = 1) +
+  scale_x_continuous(label = axis_set$CHROM, breaks = axis_set$center) +
+  scale_y_continuous(expand = c(0,0), limits = c(0, 350)) +
+  scale_color_manual(values = c("#B2172C", "#EF8A62")) +
+  scale_size_continuous(range = c(0.5,3)) +
+  labs(x = NULL, 
+       y = "-log10(P)") + 
+  theme_bw() +
+  theme(
+    legend.title = element_blank(),
+    panel.grid = element_blank(),
+    #panel.grid.major.x = element_blank(),
+    #panel.grid.minor.x = element_blank(),
+    axis.text.x = element_text(angle = 60, size = 12, vjust = 0.5, color = "black"),
+    axis.text.y = element_text(size = 12, color = "black"),
+    axis.title = element_text(size = 12, color = "black"),
+    legend.text = element_text(size = 12, color = "black"),
+  ) +
+  guides(size="none")
+
+
+manhattan(CD_UKBB)
+colnames(CD_UKBB)
+
+mp <- olink_hits %>%
+    separate(snpid,
+             into = c("CHROM", "POS", "REF", "ALT"),
+             sep = ":") %>%
+    dplyr::select(CHROM, POS, REF, ALT, p_score, AltAF_GRL) %>% 
+    rename(P = p_score,
+           AF = AltAF_GRL)
+manhattan(mp)
+
+```
+
