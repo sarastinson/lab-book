@@ -1,12 +1,8 @@
-TODO: Add more to the title of your project here
-
 # lab-book:
 
 Landing place for notebooks in progress. 
 
 # Brief description of folder and file contents
-
-TODO: As project evolves, add brief description of what is inside the data, doc and R folders.
 
 The following folders contain:
 
